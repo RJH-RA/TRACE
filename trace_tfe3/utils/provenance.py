@@ -6,9 +6,9 @@ import platform
 import random
 import subprocess
 import sys
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 

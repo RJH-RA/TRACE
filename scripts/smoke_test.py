@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
+import sys
 import tempfile
 from pathlib import Path
-import sys
 
 import numpy as np
 import pandas as pd
@@ -14,14 +14,14 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from trace_tfe3.data import TRACECaseDataset, trace_collate
-from trace_tfe3.models import CompactSliceBackbone, TRACECTEncoder, TRACEModel
-from trace_tfe3.models.transport import asrot_loss, asrot_plan
 from trace_tfe3.evaluation import (
     apply_trace_clinical,
     fit_trace_clinical,
     select_operating_point,
     threshold_metrics,
 )
+from trace_tfe3.models import CompactSliceBackbone, TRACECTEncoder, TRACEModel
+from trace_tfe3.models.transport import asrot_loss, asrot_plan
 
 
 def main() -> None:

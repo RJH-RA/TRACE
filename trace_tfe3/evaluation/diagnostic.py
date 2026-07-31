@@ -97,7 +97,7 @@ def diagnostic_summary(
         )
         row = {
             "cohort": cohort,
-            "n": int(len(sub)),
+            "n": len(sub),
             "events": int(sub[label_col].sum()),
             "auc": auc,
             "auc_ci_low": ci_low,

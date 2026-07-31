@@ -39,7 +39,7 @@ def resample(
         )
     old_spacing, old_size = image.GetSpacing(), image.GetSize()
     new_size = [
-        int(round(old_size[index] * old_spacing[index] / spacing[index]))
+        round(old_size[index] * old_spacing[index] / spacing[index])
         for index in range(3)
     ]
     transform = sitk.Transform()
@@ -122,10 +122,11 @@ def preprocess_ct_case(
     arterial_path: str | Path,
     mask_path: str | Path,
     output_dir: str | Path,
-    config: CTPreprocessConfig = CTPreprocessConfig(),
+    config: CTPreprocessConfig | None = None,
 ) -> dict[str, str]:
     """Register, resample, window, and crop paired CT for one patient."""
 
+    config = config or CTPreprocessConfig()
     sitk = _sitk()
     noncontrast = sitk.ReadImage(str(noncontrast_path), sitk.sitkFloat32)
     arterial = sitk.ReadImage(str(arterial_path), sitk.sitkFloat32)

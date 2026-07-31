@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-
 FEATURES = (
     "trace_ct_score",
     "age",
@@ -64,7 +63,7 @@ def fit_trace_clinical(
         "coefficient": model.coef_[0].tolist(),
         "intercept": float(model.intercept_[0]),
         "regularization_c": regularization_c,
-        "n": int(len(frame)),
+        "n": len(frame),
         "events": int(y.sum()),
     }
 

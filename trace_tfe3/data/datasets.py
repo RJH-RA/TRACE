@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-
 
 CT_PHASES = ("noncontrast", "arterial")
 DEFAULT_PATHOLOGY_DIM = 1536
@@ -40,7 +39,7 @@ def load_tensor(path: str | Path) -> torch.Tensor:
         return torch.from_numpy(np.load(path)).float()
     if path.suffix == ".npz":
         data = np.load(path)
-        key = "volume" if "volume" in data else list(data.keys())[0]
+        key = "volume" if "volume" in data else next(iter(data.keys()))
         return torch.from_numpy(data[key]).float()
     raise ValueError(f"Unsupported tensor file: {path}")
 
@@ -74,7 +73,7 @@ def load_pathology_tokens(paths: list[str]) -> torch.Tensor:
 class TRACECaseDataset(Dataset):
     """Patient-level paired-CT dataset with training-only H&E token support."""
 
-    required_columns = {"patient_id", "split", "label", *CT_PHASES}
+    required_columns: ClassVar[set[str]] = {"patient_id", "split", "label", *CT_PHASES}
 
     def __init__(
         self,

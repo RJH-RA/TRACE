@@ -6,7 +6,6 @@ from typing import Any
 
 import yaml
 
-
 _REFERENCE = re.compile(r"^\$\{([A-Za-z0-9_.-]+)\}$")
 
 

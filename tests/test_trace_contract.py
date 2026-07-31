@@ -18,7 +18,6 @@ from trace_tfe3.models import (
 )
 from trace_tfe3.preprocessing.manifest import build_patient_manifest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

@@ -41,7 +41,7 @@ def main() -> None:
         "rule": "highest specificity with sensitivity at least the prespecified floor",
         "minimum_sensitivity": args.minimum_sensitivity,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-        "n": int(len(frame)),
+        "n": len(frame),
         "events": int(frame[args.label_col].sum()),
     }
     destination = Path(args.output_json)
