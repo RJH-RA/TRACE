@@ -199,15 +199,12 @@ python scripts/write_run_manifest.py \
   --output outputs/run_manifest.json
 ```
 
-See [`docs/reproducibility.md`](docs/reproducibility.md) for the complete
-reproduction sequence and current validation boundary.
-
 ## Repository structure
 
 ```text
 configs/                    Locked experiment configuration
 data/                       De-identified example manifests only
-docs/                       Pipeline, governance, and method notes
+docs/assets/                TRACE framework figure
 trace_tfe3/
   data/                     Patient-level CT/H&E data contract
   models/                   DINOv3 CT encoder, pathology teacher, ASROT, TRACE
