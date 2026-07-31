@@ -9,15 +9,11 @@ deployed `TRACE-CT` model receives CT alone and returns a continuous TFE3 score.
 `TRACE-Clinical` combines the frozen CT score with age, sex, and automatically
 measured maximum tumour diameter.
 
-> **Pretest implementation status (`v0.1.0-pretest`)**
->
-> This version freezes the code and data contracts before real-data training.
-> Unit tests and a synthetic, dependency-light smoke test validate interfaces;
-> they do not validate scientific performance. The repository contains no
-> patient data, pretrained weights, molecular results, manuscript result
-> tables, or clinically validated checkpoint. It is not a medical device.
-
 ## Method overview
+
+![TRACE framework](docs/assets/TRACE_model_framework.png)
+
+**Figure. Overview of the proposed TRACE framework.**
 
 TRACE separates development-time privileged information from application-time
 inputs:
@@ -236,8 +232,7 @@ tests/                      Data-contract and ASROT regression tests
 
 ## Code validation
 
-No real-data training is performed in this release. The repository can still
-be checked without DINOv3 or Prov-GigaPath downloads:
+The repository can be checked without DINOv3 or Prov-GigaPath downloads:
 
 ```bash
 ruff check trace_tfe3 scripts tests
@@ -245,7 +240,7 @@ pytest -q
 python scripts/smoke_test.py
 ```
 
-The smoke test exercises the paired-phase CT contract, enhancement channel,
+The contract smoke test exercises the paired-phase CT contract, enhancement channel,
 deployable network tensor shapes, ASROT marginal constraint and gradients,
 operating-point selection, and TRACE-Clinical fit/application.
 
@@ -259,10 +254,6 @@ operating-point selection, and TRACE-Clinical fit/application.
   year    = {2026}
 }
 ```
-
-TRACE was derived from the repository architecture of
-[PIVOT](https://github.com/HepatoAI-Lab/PIVOT). The retained Git history and
-`upstream-pivot` remote preserve that provenance.
 
 ## License
 

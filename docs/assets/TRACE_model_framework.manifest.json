@@ -1,0 +1,15 @@
+{
+  "asset": "TRACE_model_framework.png",
+  "scientific_role": "proposed TRACE framework overview",
+  "source_artifact": "Figure6.pptx",
+  "source_sha256": "3DA2769ABA8DEB9D5996F5F830162BAF12062402146E9EAD77541843E46314E5",
+  "asset_sha256": "C304002711CE77B68C73B748C0D86BAEBC794900BA74EC55CBE20A80C4F15411",
+  "width_px": 9702,
+  "height_px": 7098,
+  "horizontal_dpi": 600,
+  "vertical_dpi": 600,
+  "data_status": "synthetic_prototype",
+  "artifact_role": "visual_reference",
+  "is_submission_eligible": false,
+  "scientific_closure": "pending reconciliation between artwork labels and the executable configuration"
+}

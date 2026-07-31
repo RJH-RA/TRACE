@@ -2,10 +2,10 @@
 
 ## Scope of this version
 
-`v0.1.0-pretest` freezes the executable method and analysis interfaces before
-real-data training. It is designed to make a later locked experiment
-traceable; it does not reproduce manuscript performance numbers because no
-real training run or validated checkpoint is included.
+`v0.1.0` defines the executable method and analysis interfaces required for a
+traceable TRACE experiment. Reproducing study estimates additionally requires
+the governed study data, approved external model weights, and a locked run
+manifest.
 
 ## External components
 
@@ -46,7 +46,7 @@ for reported experiments.
 
 - exact cohort/split manifest hash and a leakage audit;
 - external-component versions and checkpoint hashes;
-- successful CI, unit tests, and synthetic smoke test;
+- successful CI, unit tests, and contract smoke test;
 - complete command log and environment lock;
 - training curves and checkpoint-selection record;
 - patient-level predictions for independently regenerated tables and figures;
