@@ -1,0 +1,85 @@
+output_dir: outputs
+seed: 2068341690
+
+paths:
+  dinov3_checkpoint: ../weights/dinov3_vitb16.pth
+  gigapath_repo: ../prov-gigapath
+  gigapath_tile_checkpoint: ../prov-gigapath/hf_weights/pytorch_model.bin
+  gigapath_slide_checkpoint: ../prov-gigapath/hf_weights/slide_encoder.pth
+  renal_segmentor: ../RenalTumourSegmentor
+
+data:
+  manifest_csv: data/trace_manifest.csv
+  train_split: train
+  validation_split: validation
+  internal_test_split: internal_test
+  external_test_split: external_test
+  phases:
+    - noncontrast
+    - arterial
+  require_pathology_for_training: true
+
+preprocessing:
+  reference_phase: arterial
+  target_spacing_mm: [1.0, 1.0, 3.0]
+  roi_shape_voxels: [16, 128, 128]
+  hu_window: [-150, 350]
+  output_range: [0.0, 1.0]
+  channels:
+    - registered_noncontrast
+    - arterial
+    - arterial_minus_noncontrast
+
+ct_encoder:
+  family: DINOv3
+  variant: ViT-B/16
+  checkpoint: ${paths.dinov3_checkpoint}
+  input_channels: 3
+  backbone_output_dim: 768
+  shared_dim: 256
+  token_count: 16
+  transformer_layers: 2
+  transformer_heads: 8
+  frozen_backbone: true
+
+pathology:
+  source: H&E
+  encoder: Prov-GigaPath
+  token_embedding_dim: 1536
+  shared_dim: 256
+  adapter_hidden_dim: 256
+  patient_hidden_dim: 256
+  representative_tokens_per_patient: 30
+
+asrot:
+  epsilon: 0.05
+  tau: 0.10
+  lambda_ot: 0.20
+  max_iterations: 50
+  tolerance: 0.000001
+  cost: cosine_distance
+  fixed_marginal: pathology
+  relaxed_marginal: CT
+
+training:
+  device: cuda
+  num_workers: 4
+  batch_size: 8
+  epochs: 100
+  classification_warmup_epochs: 20
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  pathology_batch_size: 16
+  pathology_epochs: 300
+  pathology_learning_rate: 0.00001
+  checkpoint_rule: final_epoch
+
+inference:
+  pathology_inputs_allowed: false
+  patient_aggregation: maximum_candidate_probability
+  output_score_column: trace_ct_score
+
+evaluation:
+  bootstrap_resamples: 2000
+  positive_class: TFE3-rRCC
+  threshold_rule: highest_training_specificity_with_sensitivity_at_least_0.80

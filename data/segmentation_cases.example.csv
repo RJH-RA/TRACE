@@ -1,2 +1,2 @@
-patient_id,image_path
-PIVOT_0001,/path/to/PIVOT_0001_PVP.nii.gz
+patient_id,noncontrast_path,arterial_path
+TRACE_0001,/path/to/TRACE_0001_noncontrast.nii.gz,/path/to/TRACE_0001_arterial.nii.gz

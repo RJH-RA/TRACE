@@ -1,0 +1,2 @@
+patient_id,mask_path,noncontrast,arterial
+TRACE_0001,/path/to/TRACE_0001_mask.nii.gz,/path/to/TRACE_0001_noncontrast.nii.gz,/path/to/TRACE_0001_arterial.nii.gz

@@ -1,2 +1,4 @@
 patient_id,split,label
-PIVOT_0001,train,1
+TRACE_0001,train,1
+TRACE_0002,validation,0
+TRACE_0003,external_test,0

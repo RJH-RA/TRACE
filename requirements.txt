@@ -5,10 +5,9 @@ torch
 torchvision
 timm>=1.0.3
 einops
-monai
-dynamic-network-architectures
 nibabel
 SimpleITK
 scikit-image
+scikit-learn
 openslide-python
 tqdm

@@ -13,13 +13,13 @@ def main() -> None:
     parser.add_argument("--predictions-csv", required=True)
     parser.add_argument("--output-csv", required=True)
     parser.add_argument("--label-col", default="label")
-    parser.add_argument("--score-col", default="pivot_score")
+    parser.add_argument("--score-col", default="trace_ct_score")
     parser.add_argument("--cohort-col", default="split")
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--bootstrap", type=int, default=2000)
     args = parser.parse_args()
 
-    from pivot.evaluation import diagnostic_summary
+    from trace_tfe3.evaluation import diagnostic_summary
 
     summary = diagnostic_summary(
         prediction_csv=args.predictions_csv,

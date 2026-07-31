@@ -20,8 +20,12 @@ def main() -> None:
 
     import pandas as pd
 
-    from pivot.preprocessing.wsi import build_slide_embedding_manifest, extract_slide_embedding_with_gigapath, tile_slide_with_gigapath
-    from pivot.utils.config import load_config, resolve_config_path
+    from trace_tfe3.preprocessing.wsi import (
+        build_slide_embedding_manifest,
+        extract_slide_embedding_with_gigapath,
+        tile_slide_with_gigapath,
+    )
+    from trace_tfe3.utils.config import load_config, resolve_config_path
 
     cfg = load_config(args.config)
     gigapath_repo = resolve_config_path(cfg, cfg["paths"]["gigapath_repo"])
@@ -40,6 +44,8 @@ def main() -> None:
         slide_id = str(row.slide_id)
         patient_id = str(row.patient_id)
         stain = str(row.stain).lower()
+        if stain not in {"he", "h&e"}:
+            raise ValueError(f"TRACE accepts H&E only; received stain={stain!r}")
         tile_dir = output_dir / "tiles" / slide_id
         dataset_csv = tile_slide_with_gigapath(
             row.slide_path,

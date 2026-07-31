@@ -1,244 +1,208 @@
-# PIVOT
+# TRACE
 
-Official implementation of **PIVOT**, a pathology-informed foundation model framework for preoperative prediction of vessels encapsulating tumor clusters (VETC) in hepatocellular carcinoma using multiparametric MRI.
+Reference implementation of **TRACE**, a pathology-privileged learning framework
+for preoperative identification of TFE3-rearranged renal cell carcinoma
+(TFE3-rRCC) from paired noncontrast and arterial-phase CT.
 
-PIVOT uses paired postoperative H&E whole-slide images and CD34 immunohistochemistry during model development to guide MRI representation learning. The clinical prediction pathway uses pretreatment MRI only.
+TRACE uses postoperative H&E whole-slide images only during development. The
+deployed `TRACE-CT` model receives CT alone and returns a continuous TFE3 score.
+`TRACE-Clinical` combines the frozen CT score with age, sex, and automatically
+measured maximum tumour diameter.
 
-## 🔎 Overview
+> **Research-use status**
+>
+> This repository is an implementation scaffold aligned to the locked study
+> protocol. It does not contain patient data, pretrained weights, molecular
+> results, or a clinically validated checkpoint. It is not a medical device.
 
-PIVOT is designed for noninvasive assessment of VETC status before surgery. The framework contains three components.
+## Method overview
 
-1. **Histopathologic reference learning** from H&E and CD34 whole-slide images using Prov-GigaPath slide representations.
-2. **Multiparametric MRI encoding** using a shared Triad-SwinB 3D MRI foundation backbone with sequence-specific adapters.
-3. **MRI-pathology alignment** between the MRI-derived VETC representation and fixed H&E-derived morphologic and CD34-derived vascular reference embeddings.
+TRACE separates development-time privileged information from application-time
+inputs:
 
-The final PIVOT score is generated from pretreatment MRI and can be used for VETC risk estimation, model comparison, calibration analysis, decision-curve analysis, and downstream recurrence-risk assessment.
+1. **TRACE-d** detects and segments kidneys and renal tumours from registered
+   noncontrast and arterial-phase CT.
+2. **Pathology teacher** represents postoperative H&E tissue with frozen
+   Prov-GigaPath features and attention-based patient aggregation.
+3. **TRACE-c** applies a shared slice-wise DINOv3 encoder to the CT tumour ROI
+   and aggregates the axial tokens for TFE3-rRCC classification.
+4. **ASROT transfer** aligns CT and H&E token sets with asymmetric semi-relaxed
+   optimal transport. The pathology marginal is fixed; the CT marginal is
+   relaxed with generalized KL regularisation.
+5. **CT-only inference** removes the pathology teacher and transport branch.
 
-## 🧠 Method
-
-For each patient, six registered MRI sequences are used as model input.
+The default method contract uses:
 
 ```text
-T1WI, T2WI, DWI, AP, PVP, DP
+CT phases:          noncontrast + arterial/corticomedullary
+CT channels:        noncontrast, arterial, arterial-minus-noncontrast
+ROI:                16 x 128 x 128 voxels
+shared dimension:   256
+ASROT epsilon:      0.05
+ASROT tau:          0.10
+ASROT loss weight:  0.20
 ```
 
-Each sequence is encoded independently with the same Triad-SwinB encoder. Sequence-level embeddings are adapted with lightweight sequence-specific adapters, combined with sequence-type embeddings, and processed by a sequence-token transformer. A learnable VETC classification token is used for MRI-based prediction and for alignment with histopathologic reference embeddings during training.
+## Installation
 
-For pathology, slide-level embeddings from all available H&E or CD34 slides of the same patient are aggregated with a patient-level attention module. H&E provides a morphologic reference embedding, whereas CD34 provides a vascular reference embedding and defines the VETC endpoint.
-
-The MRI model is optimized with VETC classification loss and two scaled cosine-error alignment losses.
-
-```math
-\mathcal{L}_{\mathrm{total}}
-=
-\mathcal{L}_{\mathrm{cls}}
-+
-\lambda_{\mathrm{morph}}\mathcal{L}_{\mathrm{morph}}
-+
-\lambda_{\mathrm{vasc}}\mathcal{L}_{\mathrm{vasc}}
-```
-
-The default setting uses $\gamma=3$, $\lambda_{\mathrm{morph}}=0.05$, and $\lambda_{\mathrm{vasc}}=0.10$, assigning a moderately higher weight to the CD34-derived vascular reference.
-
-## ⚙️ Installation
-
-Create an environment with PyTorch, MONAI, Triad dependencies, and Prov-GigaPath dependencies. Then install PIVOT in editable mode.
+Python 3.10 or newer is required.
 
 ```bash
-cd PIVOT
+git clone <TRACE repository URL>
+cd TRACE
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 ```
 
-The default configuration expects the following local foundation-model repositories and weights.
+Prov-GigaPath and DINOv3 weights are not redistributed. Configure their local
+paths in [`configs/trace_default.yaml`](configs/trace_default.yaml).
+
+## Data contract
+
+The patient-level manifest contains no raw identifiers. Required columns are:
 
 ```text
-../Triad
-../Triad/weights/Triad-SwinB-SimMIM.pth
-../prov-gigapath
-../prov-gigapath/hf_weights/
+patient_id,split,label,noncontrast,arterial,he_token_embeddings
 ```
 
-These paths are relative to [configs/pivot_default.yaml](configs/pivot_default.yaml) and can be changed for a different local layout.
+- `label`: `1` for molecularly confirmed TFE3-rRCC and `0` for the prespecified
+  clear-cell or papillary RCC control spectrum.
+- `split`: patient-level `train`, `internal_test`, or `external_test`.
+- `noncontrast`, `arterial`: paths to registered tumour-centred arrays.
+- `he_token_embeddings`: a path or semicolon-separated paths to development-only
+  H&E token tensors. This field is required only for training rows.
 
-## 🧾 Data Preparation
-
-PIVOT uses a patient-level CSV manifest.
-
-Required columns:
+Optional deployable variables are:
 
 ```text
-patient_id,split,label,T1WI,T2WI,DWI,AP,PVP,DP,he_slide_embeddings,cd34_slide_embeddings
+age,sex,automated_maximum_tumour_diameter_cm
 ```
 
-MRI columns should point to tumor-centered, registered 3D MRI tensors saved as `.pt`, `.npy`, or `.npz`. Pathology columns should point to precomputed slide-level embeddings from Prov-GigaPath. Multiple slide embeddings can be provided as semicolon-separated paths.
+See [`data/trace_manifest.example.csv`](data/trace_manifest.example.csv).
+Never commit DICOM, WSI, linkage tables, direct identifiers, institution-local
+mount paths, or checkpoints derived from restricted data.
 
-Example files are provided in:
+## Pipeline
 
-```text
-data/pivot_manifest.example.csv
-data/slides.example.csv
-data/segmentation_cases.example.csv
-data/mri_cases.example.csv
-data/labels.example.csv
-```
-
-The raw-to-model workflow is organized into separate clinical data preparation steps.
-
-### 🧲 Automated MRI Tumor Segmentation
-
-Run the local nnU-Net liver tumor segmentor on the reference MRI phase, typically PVP.
+### 1. Prepare paired CT
 
 ```bash
-python scripts/run_tumor_segmentation.py \
-  --cases-csv data/segmentation_cases.csv \
-  --output-dir outputs/segmentation \
-  --output-csv outputs/segmentation/masks.csv \
-  --model-dir ../LiverTumorSegmentor
+python scripts/preprocess_ct.py \
+  --cases-csv data/ct_cases.csv \
+  --output-dir outputs/ct \
+  --output-csv outputs/ct/ct_manifest.csv \
+  --config configs/trace_default.yaml
 ```
 
-The input CSV should contain:
-
-```text
-patient_id,image_path
-```
-
-### 🧬 Multiparametric MRI Preparation
-
-Prepare registered tumor-centered tensors for the six MRI sequences.
-
-```bash
-python scripts/preprocess_mri.py \
-  --cases-csv data/mri_cases.csv \
-  --output-dir outputs/mri_tensors \
-  --output-csv outputs/mri_tensors/mri_manifest.csv
-```
-
-The input CSV should contain:
-
-```text
-patient_id,mask_path,T1WI,T2WI,DWI,AP,PVP,DP
-```
-
-### 🧫 Whole-Slide Image Processing
-
-Tile H&E and CD34 WSIs and extract Prov-GigaPath slide-level embeddings.
+### 2. Extract H&E token embeddings
 
 ```bash
 python scripts/tile_wsi.py \
-  --config configs/pivot_default.yaml \
+  --config configs/trace_default.yaml \
   --slides-csv data/slides.csv \
-  --output-dir outputs/gigapath_embeddings
+  --output-dir outputs/pathology
 ```
 
-The slide CSV should contain:
-
-```text
-slide_id,patient_id,stain,slide_path
-```
-
-### 🧾 Patient-Level Manifest
-
-Combine MRI tensors, VETC labels, cohort splits, and WSI embeddings into the final PIVOT manifest.
+### 3. Build the locked patient manifest
 
 ```bash
-python scripts/build_pivot_manifest.py \
-  --mri-csv outputs/mri_tensors/mri_manifest.csv \
+python scripts/build_trace_manifest.py \
+  --ct-csv outputs/ct/ct_manifest.csv \
   --labels-csv data/labels.csv \
-  --slide-embedding-csv outputs/gigapath_embeddings/slide_embedding_manifest.csv \
-  --output-csv data/pivot_manifest.csv
+  --slide-embedding-csv outputs/pathology/slide_embedding_manifest.csv \
+  --output-csv data/trace_manifest.csv
 ```
 
-## 🚀 Training
-
-Train H&E and CD34 histopathologic reference models.
+### 4. Train the pathology teacher and TRACE-CT
 
 ```bash
 python scripts/train_pathology.py \
-  --config configs/pivot_default.yaml \
-  --stain he
+  --config configs/trace_default.yaml
 
-python scripts/train_pathology.py \
-  --config configs/pivot_default.yaml \
-  --stain cd34
+python scripts/train_trace.py \
+  --config configs/trace_default.yaml \
+  --pathology-checkpoint outputs/pathology_he/best.pt
 ```
 
-Train the MRI PIVOT model with fixed histopathologic references.
+### 5. Run CT-only inference
 
 ```bash
-python scripts/train_pivot.py \
-  --config configs/pivot_default.yaml \
-  --he-checkpoint outputs/pathology_he/best.pt \
-  --cd34-checkpoint outputs/pathology_cd34/best.pt
+python scripts/infer_trace.py \
+  --config configs/trace_default.yaml \
+  --checkpoint outputs/trace_ct/final.pt \
+  --split external_test \
+  --output outputs/trace_scores_external.csv
 ```
 
-The MRI training script follows a staged procedure.
+The inference file contains:
 
-1. H&E and CD34 reference models are fixed.
-2. Newly introduced MRI adaptation and alignment modules are trained with alignment losses.
-3. VETC classification loss is added, and the final Triad-SwinB stage is fine-tuned with a lower learning rate.
+```text
+patient_id,trace_ct_score
+```
 
-## 🧪 Inference
+No pathology tensor is loaded by the inference entry point.
 
-Run MRI-only inference with a trained PIVOT checkpoint.
+### 6. Evaluate a frozen operating point
 
 ```bash
-python scripts/infer_pivot.py \
-  --config configs/pivot_default.yaml \
-  --checkpoint outputs/pivot_mri/best.pt \
-  --split test \
-  --output outputs/pivot_scores_test.csv
+python scripts/evaluate_predictions.py \
+  --predictions-csv outputs/trace_scores_external.csv \
+  --output-csv outputs/trace_metrics_external.csv \
+  --score-col trace_ct_score \
+  --threshold <training-selected threshold>
 ```
 
-The output file contains patient identifiers and PIVOT scores.
+The intended evaluation uses a threshold selected in the training cohort,
+transported unchanged to the internal and external test cohorts, and 2,000
+patient-level bootstrap resamples.
+
+## Repository structure
 
 ```text
-patient_id,pivot_score
+configs/                    Locked experiment configuration
+data/                       De-identified example manifests only
+docs/                       Pipeline, governance, and method notes
+trace_tfe3/
+  data/                     Patient-level CT/H&E data contract
+  models/                   DINOv3 CT encoder, pathology teacher, ASROT, TRACE
+  preprocessing/            Paired CT and manifest preparation
+  training/                 Losses, training loop, and metrics
+  evaluation/               Diagnostic evaluation utilities
+scripts/                    Reproducible command-line entry points
+tests/                      Data-contract and ASROT regression tests
 ```
 
-## 📁 Repository Structure
+## Reproducibility boundaries
 
-```text
-configs/
-  pivot_default.yaml              Default experiment configuration
-data/
-  pivot_manifest.example.csv      Example patient-level manifest
-  slides.example.csv              Example WSI slide manifest
-pivot/
-  data/                           Dataset and collate functions
-  models/                         MRI encoder, pathology reference model, PIVOT model
-  training/                       Losses, metrics, and training utilities
-  utils/                          Configuration utilities
-scripts/
-  run_tumor_segmentation.py
-  preprocess_mri.py
-  tile_wsi.py
-  build_pivot_manifest.py
-  train_pathology.py
-  train_pivot.py
-  infer_pivot.py
-  evaluate_predictions.py
-```
+- Split at the patient level; never allow one patient's images, slides, lesions,
+  or outcomes to cross cohorts.
+- Fit models, preprocessing statistics, operating points, and calibration only
+  in the training cohort.
+- Keep H&E and molecular results out of internal/external inference.
+- Record configuration, code commit, checkpoint hash, manifest hash, and output
+  hash for every locked run.
+- Treat the recurrence-free-survival analysis as a separate exploratory
+  analysis, not as a training objective.
 
-## 📚 Citation
-
-If you use this code, please cite the PIVOT manuscript.
+## Citation
 
 ```bibtex
-@article{pivot_vetc,
-  title   = {Pathology-Informed Foundation Model for Preoperative MRI Prediction of Vessels Encapsulating Tumor Clusters in Hepatocellular Carcinoma},
-  author  = {PIVOT Investigators},
+@article{trace_tfe3,
+  title   = {Pathology-privileged learning for preoperative CT identification of TFE3-rearranged renal cell carcinoma},
+  author  = {TRACE Investigators},
   journal = {Manuscript in preparation},
   year    = {2026}
 }
 ```
 
-## 🙏 Acknowledgements
+TRACE was derived from the repository architecture of
+[PIVOT](https://github.com/HepatoAI-Lab/PIVOT). The retained Git history and
+`upstream-pivot` remote preserve that provenance.
 
-PIVOT builds on publicly available foundation-model resources for 3D MRI and whole-slide pathology representation learning, including Triad and Prov-GigaPath. Model weights are not redistributed in this repository and should be obtained from their original sources or local institutional mirrors.
+## License
 
-## 📄 License
-
-The PIVOT source code is released under the Apache License 2.0. See [LICENSE](LICENSE) for details.
-
-Pretrained weights, third-party foundation models, and datasets are not redistributed in this repository and remain subject to their original licenses and access terms.
+The source code is released under the Apache License 2.0. Third-party models,
+weights, and datasets remain subject to their original licences and access
+conditions.

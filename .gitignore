@@ -23,3 +23,16 @@ data/embeddings/
 *.tiff
 *.ndpi
 *.mrxs
+*.dcm
+*.dicom
+*.xlsx
+*.xls
+*.db
+*.sqlite
+*.parquet
+*.pkl
+
+.env
+.env.*
+secrets/
+local_config/
