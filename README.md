@@ -9,11 +9,13 @@ deployed `TRACE-CT` model receives CT alone and returns a continuous TFE3 score.
 `TRACE-Clinical` combines the frozen CT score with age, sex, and automatically
 measured maximum tumour diameter.
 
-> **Research-use status**
+> **Pretest implementation status (`v0.1.0-pretest`)**
 >
-> This repository is an implementation scaffold aligned to the locked study
-> protocol. It does not contain patient data, pretrained weights, molecular
-> results, or a clinically validated checkpoint. It is not a medical device.
+> This version freezes the code and data contracts before real-data training.
+> Unit tests and a synthetic, dependency-light smoke test validate interfaces;
+> they do not validate scientific performance. The repository contains no
+> patient data, pretrained weights, molecular results, manuscript result
+> tables, or clinically validated checkpoint. It is not a medical device.
 
 ## Method overview
 
@@ -56,8 +58,12 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-Prov-GigaPath and DINOv3 weights are not redistributed. Configure their local
-paths in [`configs/trace_default.yaml`](configs/trace_default.yaml).
+Prov-GigaPath and DINOv3 source code and weights are not redistributed.
+Configure their local paths in
+[`configs/trace_default.yaml`](configs/trace_default.yaml). Relative paths in a
+configuration file are resolved against that file's directory. The production
+DINOv3 backend uses the official local repository through `torch.hub`; it does
+not silently substitute a generic ViT.
 
 ## Data contract
 
@@ -69,7 +75,8 @@ patient_id,split,label,noncontrast,arterial,he_token_embeddings
 
 - `label`: `1` for molecularly confirmed TFE3-rRCC and `0` for the prespecified
   clear-cell or papillary RCC control spectrum.
-- `split`: patient-level `train`, `internal_test`, or `external_test`.
+- `split`: patient-level `train`, `validation`, `internal_test`, or
+  `external_test`. The validation split is development-only.
 - `noncontrast`, `arterial`: paths to registered tumour-centred arrays.
 - `he_token_embeddings`: a path or semicolon-separated paths to development-only
   H&E token tensors. This field is required only for training rows.
@@ -136,27 +143,68 @@ python scripts/infer_trace.py \
   --output outputs/trace_scores_external.csv
 ```
 
-The inference file contains:
+The offline inference file contains:
 
 ```text
-patient_id,trace_ct_score
+patient_id,split,label,trace_ct_score,age,sex,automated_maximum_tumour_diameter_cm
 ```
 
-No pathology tensor is loaded by the inference entry point.
+The label and clinical columns are copied from the de-identified analysis
+manifest so the same file can be evaluated; they are not model inputs. No
+pathology tensor is loaded by the inference entry point.
 
-### 6. Evaluate a frozen operating point
+### 6. Lock the operating point in training data
+
+```bash
+python scripts/select_operating_point.py \
+  --predictions-csv outputs/trace_scores_train.csv \
+  --output-json outputs/trace_threshold.json \
+  --minimum-sensitivity 0.80
+```
+
+The JSON record includes the selection rule, source-file SHA-256, sample size,
+event count, and locked threshold.
+
+### 7. Evaluate the unchanged operating point
 
 ```bash
 python scripts/evaluate_predictions.py \
   --predictions-csv outputs/trace_scores_external.csv \
   --output-csv outputs/trace_metrics_external.csv \
   --score-col trace_ct_score \
-  --threshold <training-selected threshold>
+  --threshold-json outputs/trace_threshold.json
 ```
 
-The intended evaluation uses a threshold selected in the training cohort,
-transported unchanged to the internal and external test cohorts, and 2,000
-patient-level bootstrap resamples.
+### 8. Fit and apply TRACE-Clinical
+
+```bash
+python scripts/fit_trace_clinical.py \
+  --predictions-csv outputs/trace_scores_train.csv \
+  --output-json outputs/trace_clinical.json
+
+python scripts/apply_trace_clinical.py \
+  --predictions-csv outputs/trace_scores_external.csv \
+  --model-json outputs/trace_clinical.json \
+  --output-csv outputs/trace_clinical_external.csv
+```
+
+The four prespecified predictors are the TRACE-CT score, age, sex, and
+automatically measured maximum tumour diameter. The frozen JSON stores feature
+order, scaling statistics, coefficients, intercept, sample counts, and source
+hash. Test cohorts are never used to refit the model.
+
+### 9. Record a locked run
+
+```bash
+python scripts/write_run_manifest.py \
+  --input configs/trace_default.yaml \
+  --input data/trace_manifest.csv \
+  --input outputs/trace_ct/final.pt \
+  --output outputs/run_manifest.json
+```
+
+See [`docs/reproducibility.md`](docs/reproducibility.md) for the complete
+reproduction sequence and current validation boundary.
 
 ## Repository structure
 
@@ -185,6 +233,21 @@ tests/                      Data-contract and ASROT regression tests
   hash for every locked run.
 - Treat the recurrence-free-survival analysis as a separate exploratory
   analysis, not as a training objective.
+
+## Code validation
+
+No real-data training is performed in this release. The repository can still
+be checked without DINOv3 or Prov-GigaPath downloads:
+
+```bash
+ruff check trace_tfe3 scripts tests
+pytest -q
+python scripts/smoke_test.py
+```
+
+The smoke test exercises the paired-phase CT contract, enhancement channel,
+deployable network tensor shapes, ASROT marginal constraint and gradients,
+operating-point selection, and TRACE-Clinical fit/application.
 
 ## Citation
 

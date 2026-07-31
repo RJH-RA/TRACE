@@ -43,11 +43,13 @@ def main() -> None:
 
     from trace_tfe3.data import TRACECaseDataset, trace_collate
     from trace_tfe3.models import PathologyTeacher
-    from trace_tfe3.utils.config import load_config
+    from trace_tfe3.utils.config import load_config, resolve_config_path
+    from trace_tfe3.utils.provenance import seed_everything
 
     cfg = load_config(args.config)
+    seed_everything(int(cfg.get("seed", 2026)))
     device = torch.device(cfg["training"].get("device", "cuda"))
-    manifest = cfg["data"]["manifest_csv"]
+    manifest = resolve_config_path(cfg, cfg["data"]["manifest_csv"])
     train_set = TRACECaseDataset(manifest, cfg["data"]["train_split"], require_pathology=True)
     validation_set = TRACECaseDataset(
         manifest, cfg["data"]["validation_split"], require_pathology=True
@@ -64,6 +66,7 @@ def main() -> None:
         token_embedding_dim=pathology_cfg.get("token_embedding_dim", 1536),
         shared_dim=pathology_cfg.get("shared_dim", 256),
         hidden_dim=pathology_cfg.get("patient_hidden_dim", 256),
+        representative_tokens=pathology_cfg.get("representative_tokens_per_patient", 30),
     ).to(device)
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -72,7 +75,7 @@ def main() -> None:
     )
 
     best_auc = float("-inf")
-    destination = Path(cfg["output_dir"]) / "pathology_he"
+    destination = Path(resolve_config_path(cfg, cfg["output_dir"])) / "pathology_he"
     destination.mkdir(parents=True, exist_ok=True)
     for epoch in range(1, cfg["training"].get("pathology_epochs", 300) + 1):
         training = run_epoch(model, train_loader, optimizer, device, train=True)

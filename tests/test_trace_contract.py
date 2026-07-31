@@ -10,7 +10,12 @@ import torch
 import yaml
 
 from trace_tfe3.data import CT_PHASES, TRACECaseDataset, trace_collate
-from trace_tfe3.models import CompactSliceBackbone, TRACECTEncoder, TRACEModel
+from trace_tfe3.models import (
+    CompactSliceBackbone,
+    PathologyTeacher,
+    TRACECTEncoder,
+    TRACEModel,
+)
 from trace_tfe3.preprocessing.manifest import build_patient_manifest
 
 
@@ -76,6 +81,18 @@ class TRACEContractTests(unittest.TestCase):
         output = TRACEModel(encoder, shared_dim=32)(torch.randn(2, 3, 16, 32, 32))
         self.assertEqual(output["ct_tokens"].shape, (2, 16, 32))
         self.assertEqual(output["logit"].shape, (2,))
+
+    def test_pathology_teacher_selects_representative_tokens(self) -> None:
+        teacher = PathologyTeacher(
+            token_embedding_dim=16,
+            shared_dim=8,
+            hidden_dim=8,
+            representative_tokens=3,
+        )
+        mask = torch.tensor([[True, True, True, True, False]])
+        output = teacher(torch.randn(1, 5, 16), mask)
+        self.assertEqual(output["pathology_tokens"].shape, (1, 3, 8))
+        self.assertTrue(output["pathology_mask"].all())
 
     def test_manifest_requires_he_for_every_training_patient(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -1,7 +1,8 @@
-output_dir: outputs
+output_dir: ../outputs
 seed: 2068341690
 
 paths:
+  dinov3_repo: ../dinov3
   dinov3_checkpoint: ../weights/dinov3_vitb16.pth
   gigapath_repo: ../prov-gigapath
   gigapath_tile_checkpoint: ../prov-gigapath/hf_weights/pytorch_model.bin
@@ -9,7 +10,7 @@ paths:
   renal_segmentor: ../RenalTumourSegmentor
 
 data:
-  manifest_csv: data/trace_manifest.csv
+  manifest_csv: ../data/trace_manifest.csv
   train_split: train
   validation_split: validation
   internal_test_split: internal_test
@@ -33,6 +34,8 @@ preprocessing:
 ct_encoder:
   family: DINOv3
   variant: ViT-B/16
+  backend: torch_hub_local
+  model_name: dinov3_vitb16
   checkpoint: ${paths.dinov3_checkpoint}
   input_channels: 3
   backbone_output_dim: 768

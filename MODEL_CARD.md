@@ -1,5 +1,11 @@
 # TRACE model card
 
+## Current release boundary
+
+`v0.1.0-pretest` is a code-contract release made before real-data training.
+There is no released TRACE checkpoint and no performance claim. The tests
+verify implementation interfaces only.
+
 ## Intended use
 
 Research evaluation of preoperative TFE3-rRCC triage in patients whose renal

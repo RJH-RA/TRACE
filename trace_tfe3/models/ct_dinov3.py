@@ -31,23 +31,57 @@ def build_dinov3_backbone(
     model_name: str,
     checkpoint: str | Path | None,
     in_channels: int = 3,
+    backend: str = "torch_hub_local",
+    repository: str | Path | None = None,
 ) -> nn.Module:
-    """Build a timm-compatible DINOv3 backbone and optionally load local weights."""
+    """Build a DINOv3 backbone without silently accepting incompatible weights.
 
+    The production contract uses the official local DINOv3 repository through
+    ``torch.hub``. ``timm`` remains available only as an explicit compatibility
+    backend and requires a near-complete checkpoint match.
+    """
+
+    if in_channels != 3:
+        raise ValueError("The locked DINOv3 contract expects three CT-derived channels")
+    if backend == "torch_hub_local":
+        if not repository:
+            raise ValueError("repository is required for backend='torch_hub_local'")
+        repository = Path(repository)
+        if not repository.exists():
+            raise FileNotFoundError(f"DINOv3 repository not found: {repository}")
+        if checkpoint and not Path(checkpoint).exists():
+            raise FileNotFoundError(f"DINOv3 checkpoint not found: {checkpoint}")
+        kwargs = {"source": "local"}
+        if checkpoint:
+            kwargs["weights"] = str(checkpoint)
+        return torch.hub.load(str(repository), model_name, **kwargs)
+
+    if backend != "timm":
+        raise ValueError(f"Unsupported DINOv3 backend: {backend!r}")
     try:
         import timm
     except Exception as exc:  # pragma: no cover - optional runtime dependency
-        raise ImportError("DINOv3 loading requires timm. Install the project requirements.") from exc
-
-    model = timm.create_model(model_name, pretrained=False, num_classes=0, in_chans=in_channels)
+        raise ImportError("The explicit timm backend requires timm.") from exc
+    model = timm.create_model(model_name, pretrained=False, num_classes=0, in_chans=3)
     if checkpoint:
+        if not Path(checkpoint).exists():
+            raise FileNotFoundError(f"Backbone checkpoint not found: {checkpoint}")
         state = torch.load(checkpoint, map_location="cpu")
         state_dict = state.get("state_dict", state.get("model", state))
         normalised = {
             key.removeprefix("module.").removeprefix("backbone."): value
             for key, value in state_dict.items()
         }
-        model.load_state_dict(normalised, strict=False)
+        incompatible = model.load_state_dict(normalised, strict=False)
+        model_keys = set(model.state_dict())
+        matched = model_keys.difference(incompatible.missing_keys)
+        match_fraction = len(matched) / max(1, len(model_keys))
+        if incompatible.unexpected_keys or match_fraction < 0.95:
+            raise RuntimeError(
+                "Checkpoint is not compatible with the configured backbone: "
+                f"matched={match_fraction:.1%}, "
+                f"unexpected={len(incompatible.unexpected_keys)}"
+            )
     return model
 
 

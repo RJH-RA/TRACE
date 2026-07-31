@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 
 import numpy as np
+import pandas as pd
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -15,6 +16,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from trace_tfe3.data import TRACECaseDataset, trace_collate
 from trace_tfe3.models import CompactSliceBackbone, TRACECTEncoder, TRACEModel
 from trace_tfe3.models.transport import asrot_loss, asrot_plan
+from trace_tfe3.evaluation import (
+    apply_trace_clinical,
+    fit_trace_clinical,
+    select_operating_point,
+    threshold_metrics,
+)
 
 
 def main() -> None:
@@ -58,6 +65,40 @@ def main() -> None:
     loss, _ = asrot_loss(source, pathology)
     loss.backward()
     assert source.grad is not None and torch.isfinite(source.grad).all()
+
+    development = pd.DataFrame(
+        {
+            "label": [0, 0, 0, 0, 1, 1, 1, 1],
+            "trace_ct_score": [0.08, 0.20, 0.31, 0.42, 0.45, 0.64, 0.78, 0.91],
+            "age": [66, 59, 63, 57, 42, 37, 45, 31],
+            "sex": ["M", "F", "M", "F", "F", "M", "F", "F"],
+            "automated_maximum_tumour_diameter_cm": [
+                3.1,
+                4.8,
+                2.7,
+                4.0,
+                4.5,
+                3.8,
+                5.2,
+                3.4,
+            ],
+        }
+    )
+    operating_point = select_operating_point(
+        development["label"],
+        development["trace_ct_score"],
+        minimum_sensitivity=0.75,
+    )
+    metrics = threshold_metrics(
+        development["label"],
+        development["trace_ct_score"],
+        operating_point["threshold"],
+    )
+    assert metrics["sensitivity"] >= 0.75
+    clinical = fit_trace_clinical(development)
+    clinical_scores = apply_trace_clinical(development, clinical)
+    assert clinical_scores.shape == (len(development),)
+    assert np.isfinite(clinical_scores).all()
     print("TRACE smoke test passed")
 
 

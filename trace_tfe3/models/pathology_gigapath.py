@@ -18,6 +18,7 @@ class PathologyTeacher(nn.Module):
         shared_dim: int = 256,
         hidden_dim: int = 256,
         dropout: float = 0.1,
+        representative_tokens: int | None = 30,
     ) -> None:
         super().__init__()
         self.token_adapter = nn.Sequential(
@@ -32,6 +33,7 @@ class PathologyTeacher(nn.Module):
             output_dim=shared_dim,
         )
         self.classifier = nn.Sequential(nn.Dropout(dropout), nn.Linear(shared_dim, 1))
+        self.representative_tokens = representative_tokens
 
     def forward(
         self,
@@ -40,8 +42,30 @@ class PathologyTeacher(nn.Module):
     ) -> dict[str, torch.Tensor]:
         adapted_tokens = self.token_adapter(token_embeddings)
         patient_embedding, attention = self.patient_aggregator(adapted_tokens, token_mask)
+        alignment_tokens = adapted_tokens
+        alignment_mask = token_mask
+        if self.representative_tokens:
+            count = min(self.representative_tokens, adapted_tokens.shape[1])
+            ranking = attention
+            if token_mask is not None:
+                ranking = ranking.masked_fill(~token_mask.bool(), -1.0)
+            indices = ranking.topk(count, dim=1).indices
+            alignment_tokens = adapted_tokens.gather(
+                1,
+                indices.unsqueeze(-1).expand(-1, -1, adapted_tokens.shape[-1]),
+            )
+            if token_mask is None:
+                alignment_mask = torch.ones(
+                    adapted_tokens.shape[0],
+                    count,
+                    dtype=torch.bool,
+                    device=adapted_tokens.device,
+                )
+            else:
+                alignment_mask = token_mask.gather(1, indices)
         return {
-            "pathology_tokens": adapted_tokens,
+            "pathology_tokens": alignment_tokens,
+            "pathology_mask": alignment_mask,
             "patient_embedding": patient_embedding,
             "logit": self.classifier(patient_embedding).squeeze(-1),
             "token_attention": attention,

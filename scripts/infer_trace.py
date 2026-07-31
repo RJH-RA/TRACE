@@ -22,11 +22,15 @@ def main() -> None:
 
     from scripts.train_trace import make_model
     from trace_tfe3.data import TRACECaseDataset, trace_collate
-    from trace_tfe3.utils.config import load_config
+    from trace_tfe3.utils.config import load_config, resolve_config_path
 
     cfg = load_config(args.config)
     device = torch.device(cfg["training"].get("device", "cuda"))
-    dataset = TRACECaseDataset(cfg["data"]["manifest_csv"], args.split, require_pathology=False)
+    dataset = TRACECaseDataset(
+        resolve_config_path(cfg, cfg["data"]["manifest_csv"]),
+        args.split,
+        require_pathology=False,
+    )
     loader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=trace_collate)
     model = make_model(cfg)
     state = torch.load(args.checkpoint, map_location="cpu")
@@ -37,12 +41,32 @@ def main() -> None:
     with torch.no_grad():
         for batch in loader:
             score = torch.sigmoid(model(batch["ct"].to(device))["logit"]).cpu().item()
-            rows.append({"patient_id": batch["patient_id"][0], "trace_ct_score": score})
+            rows.append(
+                {
+                    "patient_id": batch["patient_id"][0],
+                    "split": batch["split"][0],
+                    "label": int(batch["label"][0].item()),
+                    "trace_ct_score": score,
+                    "age": float(batch["age"][0].item()),
+                    "sex": batch["sex"][0],
+                    "automated_maximum_tumour_diameter_cm": float(
+                        batch["automated_maximum_tumour_diameter_cm"][0].item()
+                    ),
+                }
+            )
 
     destination = Path(args.output)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with open(destination, "w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=["patient_id", "trace_ct_score"])
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]) if rows else [
+            "patient_id",
+            "split",
+            "label",
+            "trace_ct_score",
+            "age",
+            "sex",
+            "automated_maximum_tumour_diameter_cm",
+        ])
         writer.writeheader()
         writer.writerows(rows)
 

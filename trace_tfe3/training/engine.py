@@ -38,7 +38,7 @@ def train_one_epoch(
                     batch["pathology_mask"].to(device),
                 )
             pathology_tokens = teacher["pathology_tokens"].detach()
-            pathology_mask = batch["pathology_mask"].to(device)
+            pathology_mask = teacher["pathology_mask"]
         losses = trace_loss(
             outputs,
             batch["label"].to(device),

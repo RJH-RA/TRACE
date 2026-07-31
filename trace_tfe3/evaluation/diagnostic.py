@@ -23,11 +23,37 @@ def threshold_metrics(labels, scores, threshold: float = 0.5) -> dict[str, float
         "accuracy": (tp + tn) / max(1, len(y)),
         "ppv": tp / max(1, tp + fp),
         "npv": tn / max(1, tn + fn),
+        "f1": 2 * tp / max(1, 2 * tp + fp + fn),
         "tp": tp,
         "tn": tn,
         "fp": fp,
         "fn": fn,
     }
+
+
+def select_operating_point(
+    labels,
+    scores,
+    minimum_sensitivity: float = 0.80,
+) -> dict[str, float]:
+    """Select the highest-specificity threshold meeting a sensitivity floor."""
+
+    y = np.asarray(labels).astype(int)
+    s = np.asarray(scores).astype(float)
+    if set(np.unique(y)) != {0, 1}:
+        raise ValueError("Operating-point selection requires both outcome classes")
+    candidates = np.r_[np.inf, np.sort(np.unique(s))[::-1], -np.inf]
+    eligible = []
+    for threshold in candidates:
+        metrics = threshold_metrics(y, s, float(threshold))
+        if metrics["sensitivity"] >= minimum_sensitivity:
+            eligible.append(metrics)
+    if not eligible:
+        raise RuntimeError("No threshold satisfies the requested sensitivity floor")
+    return max(
+        eligible,
+        key=lambda item: (item["specificity"], item["ppv"], item["threshold"]),
+    )
 
 
 def bootstrap_auc_ci(labels, scores, n_bootstrap: int = 2000, seed: int = 2026) -> tuple[float, float, float]:

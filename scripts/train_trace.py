@@ -9,16 +9,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def make_model(cfg: dict):
-    from trace_tfe3.models import TRACECTEncoder, TRACEModel, build_dinov3_backbone
+    from trace_tfe3.models import (
+        CompactSliceBackbone,
+        TRACECTEncoder,
+        TRACEModel,
+        build_dinov3_backbone,
+    )
     from trace_tfe3.utils.config import resolve_config_path
 
     encoder_cfg = cfg["ct_encoder"]
-    checkpoint = resolve_config_path(cfg, cfg["paths"].get("dinov3_checkpoint"))
-    backbone = build_dinov3_backbone(
-        model_name=encoder_cfg.get("timm_model_name", "vit_base_patch16_224"),
-        checkpoint=checkpoint,
-        in_channels=encoder_cfg.get("input_channels", 3),
-    )
+    backend = encoder_cfg.get("backend", "torch_hub_local")
+    if backend == "compact_test":
+        backbone = CompactSliceBackbone(
+            encoder_cfg.get("input_channels", 3),
+            encoder_cfg.get("backbone_output_dim", 64),
+        )
+    else:
+        checkpoint = resolve_config_path(cfg, cfg["paths"].get("dinov3_checkpoint"))
+        repository = resolve_config_path(cfg, cfg["paths"].get("dinov3_repo"))
+        backbone = build_dinov3_backbone(
+            model_name=encoder_cfg.get("model_name", "dinov3_vitb16"),
+            checkpoint=checkpoint,
+            in_channels=encoder_cfg.get("input_channels", 3),
+            backend=backend,
+            repository=repository,
+        )
     encoder = TRACECTEncoder(
         backbone=backbone,
         backbone_output_dim=encoder_cfg.get("backbone_output_dim", 768),
@@ -43,11 +58,13 @@ def main() -> None:
     from trace_tfe3.data import TRACECaseDataset, trace_collate
     from trace_tfe3.models import PathologyTeacher
     from trace_tfe3.training import evaluate, train_one_epoch
-    from trace_tfe3.utils.config import load_config
+    from trace_tfe3.utils.config import load_config, resolve_config_path
+    from trace_tfe3.utils.provenance import seed_everything
 
     cfg = load_config(args.config)
+    seed_everything(int(cfg.get("seed", 2026)))
     device = torch.device(cfg["training"].get("device", "cuda"))
-    manifest = cfg["data"]["manifest_csv"]
+    manifest = resolve_config_path(cfg, cfg["data"]["manifest_csv"])
     train_set = TRACECaseDataset(
         manifest,
         cfg["data"].get("train_split", "train"),
@@ -71,6 +88,7 @@ def main() -> None:
         token_embedding_dim=pathology_cfg.get("token_embedding_dim", 1536),
         shared_dim=pathology_cfg.get("shared_dim", 256),
         hidden_dim=pathology_cfg.get("patient_hidden_dim", 256),
+        representative_tokens=pathology_cfg.get("representative_tokens_per_patient", 30),
     )
     state = torch.load(args.pathology_checkpoint, map_location="cpu")
     teacher.load_state_dict(state.get("model", state))
@@ -97,7 +115,7 @@ def main() -> None:
         validation_metrics = evaluate(model, validation_loader, device)
         print(f"epoch={epoch} train={train_metrics} validation={validation_metrics}")
 
-    output = Path(cfg["output_dir"]) / "trace_ct"
+    output = Path(resolve_config_path(cfg, cfg["output_dir"])) / "trace_ct"
     output.mkdir(parents=True, exist_ok=True)
     torch.save({"model": model.state_dict(), "config": cfg}, output / "final.pt")
 

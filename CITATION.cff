@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this implementation, please cite the associated article when available."
+title: "TRACE: pathology-privileged learning for TFE3-rRCC identification"
+type: software
+version: 0.1.0-pretest
+date-released: 2026-07-31
+authors:
+  - name: "TRACE Investigators"
+repository-code: "https://github.com/RJH-RA/TRACE"
+license: Apache-2.0

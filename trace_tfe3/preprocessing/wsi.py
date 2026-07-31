@@ -44,7 +44,12 @@ def extract_slide_embedding_with_gigapath(
     slide_encoder_path: str | Path | None = "../prov-gigapath/hf_weights/slide_encoder.pth",
     batch_size: int = 128,
 ) -> Path:
-    """Extract a Prov-GigaPath slide embedding from a generated tile dataset."""
+    """Extract token-level Prov-GigaPath features required by ASROT.
+
+    The saved ``tokens`` are tile embeddings, not a pooled slide vector.
+    ``slide_embedding`` is retained only for provenance and is not consumed by
+    the TRACE pathology teacher.
+    """
 
     _add_repo_to_path(gigapath_repo)
     try:
@@ -78,7 +83,19 @@ def extract_slide_embedding_with_gigapath(
     )
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(slide_outputs, output_path)
+    torch.save(
+        {
+            "tokens": tile_outputs["tile_embeds"].detach().cpu(),
+            "coords": tile_outputs["coords"].detach().cpu(),
+            "slide_embedding": (
+                slide_outputs.detach().cpu()
+                if isinstance(slide_outputs, torch.Tensor)
+                else slide_outputs
+            ),
+            "source": "Prov-GigaPath tile encoder",
+        },
+        output_path,
+    )
     return output_path
 
 

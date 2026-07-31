@@ -12,6 +12,7 @@ from torch.utils.data import Dataset
 
 CT_PHASES = ("noncontrast", "arterial")
 DEFAULT_PATHOLOGY_DIM = 1536
+ALLOWED_SPLITS = {"train", "validation", "internal_test", "external_test"}
 
 
 def _split_paths(value: Any) -> list[str]:
@@ -86,6 +87,11 @@ class TRACECaseDataset(Dataset):
         missing = self.required_columns.difference(frame.columns)
         if missing:
             raise ValueError(f"Manifest is missing required columns: {sorted(missing)}")
+        if frame["patient_id"].astype(str).duplicated().any():
+            raise ValueError("patient_id must be unique across the patient-level manifest")
+        unexpected = set(frame["split"].astype(str)).difference(ALLOWED_SPLITS)
+        if unexpected:
+            raise ValueError(f"Unsupported split labels: {sorted(unexpected)}")
         self.df = frame[frame["split"].astype(str) == split].reset_index(drop=True)
         if self.df.empty:
             raise ValueError(f"No rows found for split={split!r} in {manifest_csv}")
@@ -96,8 +102,12 @@ class TRACECaseDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict[str, Any]:
         row = self.df.iloc[idx]
-        noncontrast = _as_volume(load_tensor(row["noncontrast"]))
-        arterial = _as_volume(load_tensor(row["arterial"]))
+        def resolve(value: Any) -> Path:
+            path = Path(str(value))
+            return path if path.is_absolute() else self.manifest_csv.parent / path
+
+        noncontrast = _as_volume(load_tensor(resolve(row["noncontrast"])))
+        arterial = _as_volume(load_tensor(resolve(row["arterial"])))
         if noncontrast.shape != arterial.shape:
             raise ValueError(
                 f"Registered CT shapes differ for {row['patient_id']}: "
@@ -106,16 +116,24 @@ class TRACECaseDataset(Dataset):
         enhancement = arterial - noncontrast
         ct = torch.stack([noncontrast, arterial, enhancement], dim=0)
 
-        pathology_paths = _split_paths(row.get("he_token_embeddings", ""))
+        pathology_paths = [str(resolve(path)) for path in _split_paths(row.get("he_token_embeddings", ""))]
         if self.require_pathology and not pathology_paths:
             raise ValueError(f"Training row {row['patient_id']} has no H&E token embeddings")
         pathology_tokens = load_pathology_tokens(pathology_paths)
 
         return {
             "patient_id": str(row["patient_id"]),
+            "split": str(row["split"]),
             "label": torch.tensor(float(row["label"]), dtype=torch.float32),
             "ct": ct,
             "pathology_tokens": pathology_tokens,
+            "age": float(row["age"]) if pd.notna(row.get("age")) else float("nan"),
+            "sex": str(row.get("sex", "")),
+            "automated_maximum_tumour_diameter_cm": (
+                float(row["automated_maximum_tumour_diameter_cm"])
+                if pd.notna(row.get("automated_maximum_tumour_diameter_cm"))
+                else float("nan")
+            ),
         }
 
 
@@ -140,8 +158,15 @@ def trace_collate(batch: list[dict[str, Any]]) -> dict[str, Any]:
     )
     return {
         "patient_id": [item["patient_id"] for item in batch],
+        "split": [item["split"] for item in batch],
         "label": torch.stack([item["label"] for item in batch]),
         "ct": torch.stack([item["ct"] for item in batch]),
         "pathology_tokens": pathology_tokens,
         "pathology_mask": pathology_mask,
+        "age": torch.tensor([item["age"] for item in batch], dtype=torch.float32),
+        "sex": [item["sex"] for item in batch],
+        "automated_maximum_tumour_diameter_cm": torch.tensor(
+            [item["automated_maximum_tumour_diameter_cm"] for item in batch],
+            dtype=torch.float32,
+        ),
     }

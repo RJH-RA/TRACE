@@ -1,4 +1,5 @@
 patient_id,split,label,noncontrast,arterial,he_token_embeddings,age,sex,automated_maximum_tumour_diameter_cm
 TRACE_0001,train,1,/data/TRACE_0001/noncontrast.npz,/data/TRACE_0001/arterial.npz,/emb/TRACE_0001_HE_tokens.pt,34,F,4.2
 TRACE_0002,validation,0,/data/TRACE_0002/noncontrast.npz,/data/TRACE_0002/arterial.npz,/emb/TRACE_0002_HE_tokens.pt,61,M,3.1
-TRACE_0003,external_test,0,/data/TRACE_0003/noncontrast.npz,/data/TRACE_0003/arterial.npz,,56,M,5.0
+TRACE_0003,internal_test,0,/data/TRACE_0003/noncontrast.npz,/data/TRACE_0003/arterial.npz,,56,M,5.0
+TRACE_0004,external_test,1,/data/TRACE_0004/noncontrast.npz,/data/TRACE_0004/arterial.npz,,42,F,3.8
